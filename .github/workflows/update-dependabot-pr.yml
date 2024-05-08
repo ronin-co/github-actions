@@ -54,10 +54,12 @@ jobs:
             ${{ runner.os }}-${{ hashFiles('patches/**') }}-
 
       - name: Install Dependencies
-        env:
-          NPM_TOKEN: ${{ secrets.ORG_NPM_TOKEN_READ_ONLY }}
-          NPM_TOKEN_RONIN: ${{ secrets.ORG_RONIN_PACKAGE_REGISTRY_TOKEN }}
-        run: bun install --config="bunfig.ci.toml"
+        run: |
+            if [ -f "bunfig.ci.toml" ]; then
+                bun install --config="bunfig.ci.toml"
+            else
+                bun install
+            fi
 
       - name: Commit Changes and Push
         run: |
