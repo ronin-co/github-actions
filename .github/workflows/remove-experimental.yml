@@ -2,6 +2,12 @@ name: Remove Experimental Packages
 
 on:
     workflow_call:
+        inputs:
+            package_dir:
+                description: Directory of the Package
+                type: string
+                required: true
+                default: './'
 
 jobs:
   deploy:
@@ -22,4 +28,7 @@ jobs:
         run: echo "BRANCH_NAME=$(echo ${GITHUB_HEAD_REF} | sed -r 's/([a-z0-9])([A-Z])/\1-\L\2/g' | sed 's/_/-/g' | sed 's/\//-/g')" >> $GITHUB_ENV
 
       - name: Remove Experimental Packages
-        run: npm dist-tag rm ronin $BRANCH_NAME-experimental
+        run: |
+            PACKAGE_DIR=${{ inputs.package_dir }}
+            PACKAGE_NAME=$(jq -r '.name' '${PACKAGE_DIR}/package.json')
+            npm dist-tag rm $PACKAGE_NAME $BRANCH_NAME-experimental
