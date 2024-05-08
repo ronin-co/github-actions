@@ -5,9 +5,9 @@ on:
         inputs:
             package_dir:
                 description: Directory of the Package
-                type: string
-                required: true
+                required: false
                 default: './'
+                type: string
 
 jobs:
   deploy:

@@ -2,6 +2,12 @@ name: Update
 
 on:
     workflow_call:
+        inputs:
+            bun-version:
+              description: Bun Version
+              required: false
+              default: '1.1.4'
+              type: string   
 
 permissions:
   contents: write
@@ -37,7 +43,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v1
         with:
-          bun-version: 1.1.4
+          bun-version: ${{ inputs.bun-version }}
 
       # Cache the local `node_modules` directory.
       - name: Restore npm Cache
