@@ -31,5 +31,4 @@ jobs:
         run: |
             PACKAGE_DIR="${{ inputs.package_dir }}"
             PACKAGE_NAME=$(jq -r '.name' "${PACKAGE_DIR}/package.json")
-            echo "Removing dist-tag for package: $PACKAGE_NAME with tag: ${BRANCH_NAME}-experimental"
             npm dist-tag rm $PACKAGE_NAME $BRANCH_NAME-experimental
