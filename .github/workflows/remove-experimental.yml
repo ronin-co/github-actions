@@ -1,34 +1,96 @@
 name: Remove Experimental Packages
 
 on:
-    workflow_call:
-        inputs:
-            package_dir:
-                description: Directory of the Package
-                required: false
-                default: './'
-                type: string
+  workflow_call:
+    inputs:
+      branch_name:
+        description: 'Name of the branch to remove experimental packages for.'
+        required: true
+        type: string
+      package_dir:
+        description: 'Directory of the package to operate on.'
+        required: false
+        default: './'
+        type: string
+    secrets:
+      NPM_TOKEN_READ_AND_WRITE:
+        description: 'NPM token with read and write permissions.'
+        required: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     name: Remove Experimental Packages
+
     steps:
       - name: Code Checkout
         uses: actions/checkout@v3.1.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v3.5.1
-      - run: echo '//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN_READ_AND_WRITE }}' > ~/.npmrc
 
-      # This converts the branch name into dash-case, so it can be used as a
-      # valid dist-tag.
-      - name: Extract Branch Name
-        shell: bash
-        run: echo "BRANCH_NAME=$(echo ${GITHUB_HEAD_REF} | sed -r 's/([a-z0-9])([A-Z])/\1-\L\2/g' | sed 's/_/-/g' | sed 's/\//-/g')" >> $GITHUB_ENV
+      - name: Configure NPM Auth
+        run: echo '//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN_READ_AND_WRITE }}' > ~/.npmrc
 
-      - name: Remove Experimental Packages
+      - name: Get package name from package.json
+        id: package-name
         run: |
-            PACKAGE_DIR="${{ inputs.package_dir }}"
-            PACKAGE_NAME=$(jq -r '.name' "${PACKAGE_DIR}/package.json")
-            npm dist-tag rm $PACKAGE_NAME $BRANCH_NAME-experimental
+          cd ${{ inputs.package_dir }}
+          echo "PACKAGE_NAME=$(jq -r .name package.json)" >> $GITHUB_ENV
+
+      - name: Get Branch Name
+        id: get_branch_name
+        run: echo "branch_name=${{ inputs.branch_name }}" >> $GITHUB_OUTPUT
+
+      - name: Get Versions to Unpublish
+        id: get_versions
+        run: |
+          PACKAGE_NAME="${{ env.PACKAGE_NAME }}"
+          BRANCH_NAME="${{ steps.get_branch_name.outputs.branch_name }}"
+          echo "Original Branch Name: $BRANCH_NAME"
+
+          # Sanitize branch name by replacing slashes with hyphens
+          BRANCH_NAME_SANITIZED=$(echo "$BRANCH_NAME" | tr '/' '-')
+          echo "Sanitized Branch Name: $BRANCH_NAME_SANITIZED"
+
+          # Retrieve all versions
+          VERSIONS=$(npm view "$PACKAGE_NAME" versions --json)
+
+          # Check if VERSIONS is empty
+          if [ -z "$VERSIONS" ] || [ "$VERSIONS" = "null" ]; then
+            echo "No versions found for $PACKAGE_NAME."
+            exit 0
+          fi
+
+          # Filter versions that match the pattern
+          MATCHING_VERSIONS=$(echo "$VERSIONS" | tr -d '[]" ' | tr ',' '\n' | grep -F -- "-${BRANCH_NAME_SANITIZED}-experimental" || true)
+
+          # Check if any versions match
+          if [ -z "$MATCHING_VERSIONS" ]; then
+            echo "No versions to unpublish for branch $BRANCH_NAME."
+            exit 0
+          fi
+
+          # Output the versions to unpublish
+          echo "versions<<EOF" >> $GITHUB_OUTPUT
+          echo "$MATCHING_VERSIONS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Unpublish Versions
+        if: ${{ steps.get_versions.outputs.versions != '' }}
+        run: |
+          PACKAGE_NAME="${{ env.PACKAGE_NAME }}"
+
+          # Read versions into an array
+          mapfile -t versions_array <<< "${{ steps.get_versions.outputs.versions }}"
+
+          # Check if versions_array is not empty
+          if [ ${#versions_array[@]} -eq 0 ]; then
+            echo "No versions to unpublish."
+            exit 0
+          fi
+
+          for VERSION in "${versions_array[@]}"; do
+            echo "Unpublishing $PACKAGE_NAME@$VERSION"
+            npm unpublish "$PACKAGE_NAME@$VERSION" || echo "Failed to unpublish $PACKAGE_NAME@$VERSION"
+          done

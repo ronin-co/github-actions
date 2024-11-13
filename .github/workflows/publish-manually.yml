@@ -1,0 +1,92 @@
+name: Manually Publish npm Packages
+
+on:
+  workflow_call:
+    inputs:
+      version_type:
+        description: 'Version type to bump the package version by.'
+        required: true
+        default: 'patch'
+        type: string
+        # Note: 'type: choice' is not supported in reusable workflows, so we use 'string'.
+      package_dir:
+        description: 'Directory of the package to publish'
+        required: false
+        default: './'
+        type: string
+    secrets:
+      NPM_TOKEN_READ_AND_WRITE:
+        description: 'NPM token with read and write permissions'
+        required: true
+      ORG_GH_APP_ID:
+        description: 'GitHub App ID'
+        required: true
+      ORG_GH_APP_PRIVATE_KEY:
+        description: 'GitHub App Private Key'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+
+    steps:
+      - name: Generate GitHub App Token
+        id: generate_token
+        uses: tibdex/github-app-token@v1
+        with:
+          app_id: ${{ secrets.ORG_GH_APP_ID }}
+          private_key: ${{ secrets.ORG_GH_APP_PRIVATE_KEY }}
+
+      - name: Code Checkout
+        uses: actions/checkout@v3.1.0
+        with:
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3.5.1
+
+      - name: Configure NPM Auth
+        run: echo '//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN_READ_AND_WRITE }}' > ~/.npmrc
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install Dependencies
+        run: |
+          cd ${{ inputs.package_dir }}
+          bun install --frozen-lockfile
+
+      - name: Build Package
+        run: |
+          cd ${{ inputs.package_dir }}
+          bun run build
+
+      - name: Set Git Config
+        run: |
+          git config --global user.name "ronin-app[bot]"
+          git config --global user.email "135042755+ronin-app[bot]@users.noreply.github.com"
+
+      - name: Bump Package Version
+        run: |
+          cd ${{ inputs.package_dir }}
+          npm version ${{ inputs.version_type }} --git-tag-version=false
+          echo "NEW_VERSION=$(npm pkg get version --workspaces=false | tr -d '\"')" >> $GITHUB_ENV
+
+      - name: Push New Version
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+        run: |
+          git fetch
+          git checkout "${GITHUB_REF_NAME}"
+          git pull origin "${GITHUB_REF_NAME}"
+          git add ${{ inputs.package_dir }}/package.json
+          git commit -m "${{ env.NEW_VERSION }}" --no-verify
+          git tag -a "${{ env.NEW_VERSION }}" -m "${{ env.NEW_VERSION }}"
+          git push origin "${GITHUB_REF_NAME}"
+          git push origin "${{ env.NEW_VERSION }}"
+
+      - name: Publish npm Package
+        run: |
+          cd ${{ inputs.package_dir }}
+          npm publish

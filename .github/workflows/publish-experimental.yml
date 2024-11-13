@@ -1,0 +1,65 @@
+name: Publish Experimental Packages
+
+on:
+  workflow_call:
+    inputs:
+      package_dir:
+        description: 'Directory of the package to publish'
+        required: false
+        default: './'
+        type: string
+    secrets:
+      NPM_TOKEN:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Code Checkout
+        uses: actions/checkout@v3.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3.5.1
+
+      - name: Configure NPM Auth
+        run: echo '//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}' > ~/.npmrc
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Package
+        run: bun run build
+        
+      - name: Bump Package
+        uses: colodenn/github-actions/.github/actions/bump-version@main
+        with:
+          package_dir: './'
+
+      - name: Get package name from package.json
+        id: package-name
+        run: |
+          cd ${{ inputs.package_dir }}
+          echo "PACKAGE_NAME=$(jq -r .name package.json)" >> $GITHUB_ENV
+
+
+      - name: Comment on PR
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          comment_tag: packages_announcement
+          message: |
+            Released an experimental package:
+
+            ```bash
+            bun add ${{ env.PACKAGE_NAME }}@${{ env.VERSION_TAG }}
+            ```
+
+            This package will be removed after the pull request has been merged.
