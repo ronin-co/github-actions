@@ -40,7 +40,7 @@ jobs:
         run: bun run build
         
       - name: Bump Package
-        uses: ronin-co/github-actions/.github/actions/bump-version@reusable-workflows
+        uses: ronin-co/github-actions/.github/actions/bump-version@main
         with:
           package_dir: './'
 
