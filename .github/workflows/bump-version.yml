@@ -21,7 +21,7 @@ jobs:
       VERSION_TAG: ${{ steps.version-tag.outputs.VERSION_TAG }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Construct Experimental Version Tag
         id: version-tag
