@@ -7,7 +7,14 @@ on:
               description: Bun Version
               required: false
               default: '1.1.4'
-              type: string   
+              type: string
+        secrets:
+            ORG_GH_RONIN_APP_ID:
+              description: GitHub App ID
+              required: true
+            ORG_GH_RONIN_APP_PRIVATE_KEY:
+              description: GitHub App Private Key
+              required: true
 
 permissions:
   contents: write
