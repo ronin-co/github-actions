@@ -1,0 +1,61 @@
+name: Publish Experimental Packages
+
+on:
+  workflow_call:
+    inputs:
+      package_dir:
+        description: Directory of the Package to Publish
+        required: true
+        default: './'
+        type: string
+
+    outputs:
+        VERSION_TAG:
+            description: Generated Experimental Version Tag for This Package
+            value: ${{ jobs.publish.outputs.VERSION_TAG }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      VERSION_TAG: ${{ steps.version-tag.outputs.VERSION_TAG }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Construct Experimental Version Tag
+        id: version-tag
+        shell: bash
+        run: |
+          BRANCH_NAME=$(echo ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME} | sed -r 's/([a-z0-9])([A-Z])/\1-\L\2/g' | sed 's/_/-/g' | sed 's/\//-/g')
+          VERSION_TAG="${BRANCH_NAME}-experimental"
+          echo "VERSION_TAG=${VERSION_TAG}" >> $GITHUB_ENV
+          echo "VERSION_TAG=${VERSION_TAG}"
+          echo "VERSION_TAG=${VERSION_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Bump Version in ${{ inputs.package_dir }}
+        shell: bash
+        run: |
+          cd ${{ inputs.package_dir }}
+          PACKAGE_NAME=$(jq -r '.name' package.json)
+          echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
+
+          REGEX="\-${VERSION_TAG}\.[0-9]+$"
+
+          ALL_VERSIONS=$(npm view $PACKAGE_NAME versions --json | jq -r '.[]')
+
+          if ! echo "$ALL_VERSIONS" | grep -qE "$REGEX"; then
+            npm version prerelease --preid="${VERSION_TAG}" --no-git-tag-version
+          else
+            LATEST_VERSION=$(echo "$ALL_VERSIONS" | grep -E "$REGEX" | tail -1)
+            NEXT_VERSION=$(npx semver "$LATEST_VERSION" -i prerelease --preid="${VERSION_TAG}")
+            npm version "$NEXT_VERSION" --no-git-tag-version
+          fi
+
+      - name: Publish to npm
+        shell: bash
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd ${{ inputs.package_dir }}
+          npm publish --tag="${VERSION_TAG}"
